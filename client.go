@@ -53,7 +53,7 @@ func (p *Provider) getRecords(_ context.Context, zone string) ([]libdns.Record, 
 		return nil, err
 	}
 
-	records := convertNS1ZoneRecordsToLibdnsRecords(detail.Records)
+	records := convertNS1ZoneRecordsToLibdnsRecords(zone, detail.Records)
 
 	return records, nil
 }
@@ -116,23 +116,23 @@ func (p *Provider) deleteRecord(_ context.Context, zone string, record libdns.Re
 
 }
 
-func convertNS1ZoneRecordsToLibdnsRecords(recordSets []*dns.ZoneRecord) []libdns.Record {
+func convertNS1ZoneRecordsToLibdnsRecords(zone string, recordSets []*dns.ZoneRecord) []libdns.Record {
 	var records []libdns.Record
 
 	for _, recordSet := range recordSets {
-		record := convertNS1ZoneRecordToLibdnsRecord(recordSet)
+		record := convertNS1ZoneRecordToLibdnsRecord(zone, recordSet)
 		records = append(records, record)
 	}
 
 	return records
 }
 
-func convertNS1ZoneRecordToLibdnsRecord(recordSet *dns.ZoneRecord) libdns.Record {
+func convertNS1ZoneRecordToLibdnsRecord(zone string, recordSet *dns.ZoneRecord) libdns.Record {
 
 	zoneRecord := libdns.Record{
 		ID:    recordSet.ID,
 		Type:  recordSet.Type,
-		Name:  recordSet.Domain,
+		Name:  UnChallengeDomain(zone, recordSet.Domain),
 		Value: recordSet.ShortAns[0], // TODO: handle multiple answers, but seems no need
 		TTL:   time.Duration(recordSet.TTL) * time.Second,
 	}
@@ -145,13 +145,17 @@ func convertLibdnsRecordToNS1Record(zone string, record libdns.Record) *dns.Reco
 		Rdata: []string{record.Value},
 	}
 
+	// recordSet := dns.NewRecord(UnFqdn(zone), ToChallengeDomain(zone, record.Name), record.Type, make(map[string]string), make([]string, 0))
+
 	recordSet := &dns.Record{
-		ID:      record.ID,
-		Zone:    UnFqdn(zone),
-		Domain:  record.Name,
-		Type:    record.Type,
-		Answers: []*dns.Answer{answer},
-		TTL:     int(record.TTL.Seconds()),
+		ID:          record.ID,
+		Zone:        UnFqdn(zone),
+		Domain:      ToChallengeDomain(zone, record.Name),
+		Type:        record.Type,
+		Answers:     []*dns.Answer{answer},
+		TTL:         int(record.TTL.Seconds()),
+		Tags:        make(map[string]string),
+		BlockedTags: make([]string, 0),
 	}
 	return recordSet
 }
@@ -172,4 +176,12 @@ func UnFqdn(name string) string {
 		return name[:n-1]
 	}
 	return name
+}
+
+func ToChallengeDomain(zone string, subname string) string {
+	return subname + "." + UnFqdn(zone)
+}
+
+func UnChallengeDomain(zone string, name string) string {
+	return name[:len(name)-len("."+UnFqdn(zone))]
 }
