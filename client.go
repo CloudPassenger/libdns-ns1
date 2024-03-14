@@ -141,22 +141,15 @@ func convertNS1ZoneRecordToLibdnsRecord(zone string, recordSet *dns.ZoneRecord) 
 
 func convertLibdnsRecordToNS1Record(zone string, record libdns.Record) *dns.Record {
 
-	answer := &dns.Answer{
-		Rdata: []string{record.Value},
+	recordSet := dns.NewRecord(UnFqdn(zone), ToChallengeDomain(zone, record.Name), record.Type, make(map[string]string), make([]string, 0))
+
+	if record.ID != "" {
+		recordSet.ID = record.ID
 	}
 
-	// recordSet := dns.NewRecord(UnFqdn(zone), ToChallengeDomain(zone, record.Name), record.Type, make(map[string]string), make([]string, 0))
+	recordSet.TTL = int(record.TTL.Seconds())
+	recordSet.Answers = []*dns.Answer{{Rdata: []string{record.Value}}}
 
-	recordSet := &dns.Record{
-		ID:          record.ID,
-		Zone:        UnFqdn(zone),
-		Domain:      ToChallengeDomain(zone, record.Name),
-		Type:        record.Type,
-		Answers:     []*dns.Answer{answer},
-		TTL:         int(record.TTL.Seconds()),
-		Tags:        make(map[string]string),
-		BlockedTags: make([]string, 0),
-	}
 	return recordSet
 }
 
