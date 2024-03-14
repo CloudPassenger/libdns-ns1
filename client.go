@@ -107,7 +107,7 @@ func (p *Provider) deleteRecord(_ context.Context, zone string, record libdns.Re
 		return record, err
 	}
 
-	_, err = p.client.Records.Delete(UnFqdn(zone), record.Name, record.Type)
+	_, err = p.client.Records.Delete(UnFqdn(zone), ToChallengeDomain(zone, record.Name), record.Type)
 	if err != nil {
 		return record, err
 	}
