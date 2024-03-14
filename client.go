@@ -48,7 +48,7 @@ func (p *Provider) getRecords(_ context.Context, zone string) ([]libdns.Record, 
 		return nil, err
 	}
 
-	detail, _, err := p.client.Zones.Get(zone, true)
+	detail, _, err := p.client.Zones.Get(UnFqdn(zone), true)
 	if err != nil {
 		return nil, err
 	}
@@ -107,7 +107,7 @@ func (p *Provider) deleteRecord(_ context.Context, zone string, record libdns.Re
 		return record, err
 	}
 
-	_, err = p.client.Records.Delete(zone, record.Name, record.Type)
+	_, err = p.client.Records.Delete(UnFqdn(zone), record.Name, record.Type)
 	if err != nil {
 		return record, err
 	}
@@ -147,11 +147,29 @@ func convertLibdnsRecordToNS1Record(zone string, record libdns.Record) *dns.Reco
 
 	recordSet := &dns.Record{
 		ID:      record.ID,
-		Zone:    zone,
+		Zone:    UnFqdn(zone),
 		Domain:  record.Name,
 		Type:    record.Type,
 		Answers: []*dns.Answer{answer},
 		TTL:     int(record.TTL.Seconds()),
 	}
 	return recordSet
+}
+
+// ToFqdn converts the name into a fqdn appending a trailing dot.
+func ToFqdn(name string) string {
+	n := len(name)
+	if n == 0 || name[n-1] == '.' {
+		return name
+	}
+	return name + "."
+}
+
+// UnFqdn converts the fqdn into a name removing the trailing dot.
+func UnFqdn(name string) string {
+	n := len(name)
+	if n != 0 && name[n-1] == '.' {
+		return name[:n-1]
+	}
+	return name
 }
