@@ -67,7 +67,9 @@ func (p *Provider) createOrUpdateRecord(ctx context.Context, zone string, record
 		return record, err
 	}
 
-	if record.ID == "" {
+	existingRecord, _ := p.getDNSRecord(ctx, zone, record)
+
+	if existingRecord == nil {
 		return p.createRecord(ctx, zone, record)
 	} else {
 		return p.updateRecord(ctx, zone, record)
@@ -95,19 +97,31 @@ func (p *Provider) updateRecord(_ context.Context, zone string, record libdns.Re
 	}
 
 	return record, nil
+}
 
+func (p *Provider) getDNSRecord(_ context.Context, zone string, record libdns.Record) (*dns.Record, error) {
+	rr := record.RR()
+
+	detail, _, err := p.client.Records.Get(UnFqdn(zone), ToChallengeDomain(zone, rr.Name), rr.Type)
+	if err != nil {
+		return nil, err
+	}
+
+	return detail, nil
 }
 
 func (p *Provider) deleteRecord(_ context.Context, zone string, record libdns.Record) (libdns.Record, error) {
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
 
+	rr := record.RR()
+
 	err := p.init()
 	if err != nil {
 		return record, err
 	}
 
-	_, err = p.client.Records.Delete(UnFqdn(zone), ToChallengeDomain(zone, record.Name), record.Type)
+	_, err = p.client.Records.Delete(UnFqdn(zone), ToChallengeDomain(zone, rr.Name), rr.Type)
 	if err != nil {
 		return record, err
 	}
@@ -129,26 +143,23 @@ func convertNS1ZoneRecordsToLibdnsRecords(zone string, recordSets []*dns.ZoneRec
 
 func convertNS1ZoneRecordToLibdnsRecord(zone string, recordSet *dns.ZoneRecord) libdns.Record {
 
-	zoneRecord := libdns.Record{
-		ID:    recordSet.ID,
-		Type:  recordSet.Type,
-		Name:  UnChallengeDomain(zone, recordSet.Domain),
-		Value: recordSet.ShortAns[0], // TODO: handle multiple answers, but seems no need
-		TTL:   time.Duration(recordSet.TTL) * time.Second,
+	zoneRecord := libdns.RR{
+		Type: recordSet.Type,
+		Name: UnChallengeDomain(zone, recordSet.Domain),
+		Data: recordSet.ShortAns[0], // TODO: handle multiple answers, but seems no need
+		TTL:  time.Duration(recordSet.TTL) * time.Second,
 	}
 	return zoneRecord
 }
 
 func convertLibdnsRecordToNS1Record(zone string, record libdns.Record) *dns.Record {
 
-	recordSet := dns.NewRecord(UnFqdn(zone), ToChallengeDomain(zone, record.Name), record.Type, make(map[string]string), make([]string, 0))
+	rr := record.RR()
 
-	if record.ID != "" {
-		recordSet.ID = record.ID
-	}
+	recordSet := dns.NewRecord(UnFqdn(zone), ToChallengeDomain(zone, rr.Name), rr.Type, make(map[string]string), make([]string, 0))
 
-	recordSet.TTL = int(record.TTL.Seconds())
-	recordSet.Answers = []*dns.Answer{{Rdata: []string{record.Value}}}
+	recordSet.TTL = int(rr.TTL.Seconds())
+	recordSet.Answers = []*dns.Answer{{Rdata: []string{rr.Data}}}
 
 	return recordSet
 }
