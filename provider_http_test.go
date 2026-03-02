@@ -162,7 +162,10 @@ func (s *mockNS1Server) handleRecord(w http.ResponseWriter, r *http.Request, zon
 		_ = json.NewEncoder(w).Encode(toRecordResponse(rs))
 	case http.MethodPut, http.MethodPost:
 		var req struct {
-			TTL     int `json:"ttl"`
+			Zone    string `json:"zone"`
+			Domain  string `json:"domain"`
+			Type    string `json:"type"`
+			TTL     int    `json:"ttl"`
 			Answers []struct {
 				Answer []any `json:"answer"`
 			} `json:"answers"`
@@ -170,6 +173,22 @@ func (s *mockNS1Server) handleRecord(w http.ResponseWriter, r *http.Request, zon
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 			_ = json.NewEncoder(w).Encode(map[string]string{"message": err.Error()})
+			return
+		}
+
+		if req.Zone == "" {
+			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(map[string]string{"message": "missing \"zone\" in request JSON"})
+			return
+		}
+		if req.Domain == "" {
+			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(map[string]string{"message": "missing \"domain\" in request JSON"})
+			return
+		}
+		if req.Type == "" {
+			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(map[string]string{"message": "missing \"type\" in request JSON"})
 			return
 		}
 
@@ -370,5 +389,42 @@ func TestListZones(t *testing.T) {
 	slices.Sort(got)
 	if !slices.Equal(got, []string{"example.com.", "example.net."}) {
 		t.Fatalf("zones = %v, want [example.com. example.net.]", got)
+	}
+}
+
+func TestDeleteRecordsDeletesCAA(t *testing.T) {
+	mock := newMockNS1Server(t, "test-api-key")
+	mock.setRecord("example.com", "test-delete-caa.example.com", "CAA", 300, []string{"0", "issue", "ca.example.com"})
+
+	srv := httptest.NewServer(http.HandlerFunc(mock.serveHTTP))
+	defer srv.Close()
+
+	p := newProviderForServer(t, srv.URL)
+
+	deleted, err := p.DeleteRecords(context.Background(), "example.com.", []libdns.Record{
+		libdns.CAA{
+			Name:  "test-delete-caa",
+			TTL:   300 * time.Second,
+			Flags: 0,
+			Tag:   "issue",
+			Value: "ca.example.com",
+		},
+	})
+	if err != nil {
+		t.Fatalf("DeleteRecords() error = %v", err)
+	}
+	if len(deleted) != 1 {
+		t.Fatalf("DeleteRecords() deleted = %d, want 1", len(deleted))
+	}
+
+	recs, err := p.GetRecords(context.Background(), "example.com.")
+	if err != nil {
+		t.Fatalf("GetRecords() error = %v", err)
+	}
+	for _, rec := range recs {
+		rr := rec.RR()
+		if rr.Name == "test-delete-caa" && rr.Type == "CAA" {
+			t.Fatalf("CAA record should have been deleted, got %v", rr)
+		}
 	}
 }

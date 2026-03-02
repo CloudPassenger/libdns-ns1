@@ -117,16 +117,32 @@ func (c *ns1Client) getRecord(ctx context.Context, zone, domain, rtype string) (
 }
 
 func (c *ns1Client) createRecord(ctx context.Context, zone, domain, rtype string, payload ns1RecordSetWrite) (ns1RecordSet, error) {
+	reqPayload := ns1RecordSet{
+		Zone:    zone,
+		Domain:  domain,
+		Type:    strings.ToUpper(rtype),
+		TTL:     payload.TTL,
+		Answers: payload.Answers,
+	}
+
 	var out ns1RecordSet
-	if err := c.doJSON(ctx, http.MethodPut, recordPath(zone, domain, rtype), payload, &out); err != nil {
+	if err := c.doJSON(ctx, http.MethodPut, recordPath(zone, domain, rtype), reqPayload, &out); err != nil {
 		return ns1RecordSet{}, err
 	}
 	return out, nil
 }
 
 func (c *ns1Client) updateRecord(ctx context.Context, zone, domain, rtype string, payload ns1RecordSetWrite) (ns1RecordSet, error) {
+	reqPayload := ns1RecordSet{
+		Zone:    zone,
+		Domain:  domain,
+		Type:    strings.ToUpper(rtype),
+		TTL:     payload.TTL,
+		Answers: payload.Answers,
+	}
+
 	var out ns1RecordSet
-	if err := c.doJSON(ctx, http.MethodPost, recordPath(zone, domain, rtype), payload, &out); err != nil {
+	if err := c.doJSON(ctx, http.MethodPost, recordPath(zone, domain, rtype), reqPayload, &out); err != nil {
 		return ns1RecordSet{}, err
 	}
 	return out, nil
@@ -388,6 +404,10 @@ func stringifyAnswerValue(v any) string {
 }
 
 func recordExactSignature(rr libdns.RR) string {
+	if parsed, err := rr.Parse(); err == nil {
+		rr = parsed.RR()
+	}
+
 	return strings.Join([]string{
 		rr.Name,
 		strings.ToUpper(rr.Type),
