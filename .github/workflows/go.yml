@@ -1,0 +1,28 @@
+name: Go
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+
+      - name: Test root module
+        run: go test -v ./...
+
+      - name: Test libdnstest module
+        env:
+          NS1_API_KEY: ${{ secrets.NS1_API_KEY }}
+          NS1_TEST_ZONE: ${{ secrets.NS1_TEST_ZONE }}
+          NS1_API_ENDPOINT: ${{ secrets.NS1_API_ENDPOINT }}
+        run: |
+          cd libdnstest/
+          go test -v ./...
